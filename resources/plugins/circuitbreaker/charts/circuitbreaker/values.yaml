@@ -3,3 +3,12 @@ image:
   repository: "camillarhi/circuitbreaker"
   tag: "latest"
   pullPolicy: IfNotPresent
+workingVolume:
+  name: working-volume
+  mountPath: /working
+configmapVolume:
+  name: configmap-volume
+  mountPath: /configmap
+lnd:
+  rpcserver: "172.29.34.166:10009"  # Default LND RPC server address
+  httplisten: "0.0.0.0:9235"  # Default HTTP listen address
