@@ -19,6 +19,21 @@ spec:
   {{- end }}
   securityContext:
     {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  initContainers:
+  - name: prepare-files
+    image: busybox
+    command:
+      - sh
+      - -c
+      - |
+        cp /root/.lnd/tls.cert /root/.lnd/tls_copy.cert
+        chmod 644 /root/.lnd/tls_copy.cert
+    volumeMounts:
+      - name: lnd-data
+        mountPath: /root/.lnd
+      - name: config
+        mountPath: /root/.lnd/tls.cert
+        subPath: tls.cert
   containers:
     - name: {{ .Chart.Name }}
       securityContext:
@@ -44,6 +59,8 @@ spec:
       resources:
         {{- toYaml .Values.resources | nindent 8 }}
       volumeMounts:
+        - name: lnd-data
+          mountPath: /root/.lnd
         {{- with .Values.volumeMounts }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -56,12 +73,41 @@ spec:
         - mountPath: /root/.lnd/tls.cert
           name: config
           subPath: tls.cert
-    {{- if .Values.circuitBreaker }}
     - name: circuitbreaker
-      image: pinheadmz/circuitbreaker:278737d
+      securityContext:
+      privileged: true
+      capabilities:
+        add:
+          - NET_ADMIN
+          - NET_RAW
+      image: camillarhi/circuitbreaker:latest
       imagePullPolicy: IfNotPresent
-    {{- end}}
+      args:
+          - "--network=regtest"
+          - "--rpcserver=localhost:10009"
+          - "--tlscertpath=/root/.lnd/tls_copy.cert"
+          - "--macaroonpath=/root/.lnd/data/chain/bitcoin/regtest/admin.macaroon"
+          - "--httplisten=0.0.0.0:9235"
+
+      volumeMounts:
+        - name: lnd-data
+          mountPath: /root/.lnd
+      readinessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Check if tls.cert exists and is readable
+              test -f /root/.lnd/tls.cert && echo "tls.cert found" || exit 1
+              # Check if admin.macaroon exists and is readable
+              test -f /root/.lnd/data/chain/bitcoin/regtest/admin.macaroon && echo "macaroon found" || exit 1
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        timeoutSeconds: 1
   volumes:
+    - name: lnd-data
+      emptyDir: {}
     {{- with .Values.volumes }}
       {{- toYaml . | nindent 4 }}
     {{- end }}
