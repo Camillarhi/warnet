@@ -21,21 +21,23 @@ spec:
   {{- end }}
   securityContext:
     {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  {{- with .Values.extraContainers }}  
   initContainers:
-  - name: prepare-files
-    image: busybox
-    command:
-      - sh
-      - -c
-      - |
-        cp /root/.lnd/tls.cert /root/.lnd/tls_copy.cert
-        chmod 644 /root/.lnd/tls_copy.cert
-    volumeMounts:
-      - name: lnd-data
-        mountPath: /root/.lnd
-      - name: config
-        mountPath: /root/.lnd/tls.cert
-        subPath: tls.cert
+    - name: prepare-files
+      image: busybox
+      command:
+        - sh
+        - -c
+        - |
+          cp /root/.lnd/tls.cert /root/.lnd/tls_copy.cert
+          chmod 644 /root/.lnd/tls_copy.cert
+      volumeMounts:
+        - name: lnd-data
+          mountPath: /root/.lnd
+        - name: config
+          mountPath: /root/.lnd/tls.cert
+          subPath: tls.cert
+  {{- end }}
   containers:
     - name: {{ .Chart.Name }}
       securityContext:
