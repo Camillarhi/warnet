@@ -21,6 +21,7 @@ spec:
   {{- end }}
   securityContext:
     {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  {{- with .Values.extraContainers }}  
   initContainers:
     - name: prepare-files
       image: busybox
@@ -81,6 +82,9 @@ spec:
         - mountPath: /root/.lnd/tls.cert
           name: config
           subPath: tls.cert
+    {{- with .Values.extraContainers }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
     {{- with .Values.extraContainers }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
