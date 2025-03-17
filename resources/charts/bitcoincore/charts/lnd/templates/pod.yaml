@@ -19,6 +19,7 @@ spec:
   {{- end }}
   securityContext:
     {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  {{- with .Values.extraContainers }}  
   initContainers:
     - name: prepare-files
       image: busybox
