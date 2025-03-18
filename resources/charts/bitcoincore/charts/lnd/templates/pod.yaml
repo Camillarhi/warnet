@@ -19,14 +19,13 @@ spec:
   {{- end }}
   securityContext:
     {{- toYaml .Values.podSecurityContext | nindent 4 }}
-  {{- with .Values.extraContainers }}  
   initContainers:
     - name: prepare-files
       image: busybox
       command:
         - sh
         - -c
-        - |          
+        - |
           # Read the hex-encoded macaroon from the ConfigMap
           HEX_MACAROON=$(cat /config/MACAROON_HEX)
 
