@@ -132,3 +132,12 @@ config: ""
 defaultConfig: ""
 
 channels: []
+
+# Controls whether the initContainers should be included
+enableInitContainers: true
+
+# Shared volume configuration for storing shared data (e.g., macaroons or other files)
+# This volume is mounted at the specified mountPath and can be used for inter-container communication.
+sharedVolume:
+  name: shared-data
+  mountPath: /shared-data
