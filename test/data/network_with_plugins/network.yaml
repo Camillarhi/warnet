@@ -48,7 +48,7 @@ nodes:
             - name: config
               mountPath: /tls.cert
               subPath: tls.cert
-
+          
   - name: tank-0004
     addnode:
       - tank-0000
