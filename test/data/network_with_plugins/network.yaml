@@ -105,3 +105,4 @@ plugins:  # Each plugin section has a number of hooks available (preDeploy, post
       entrypoint: "../plugins/hello"
       helloTo: "postNetwork!"
       podName: "hello-post-network"
+      
