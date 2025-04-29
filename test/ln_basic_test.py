@@ -157,7 +157,7 @@ class LNBasicTest(TestBase):
     def setup_api_access(self, pod_name):
         """Set up access using predefined Service manifest"""
         service_name = "tank-0003-ln-cb-test"
-        local_port = random.randint(10000, 20000)
+        self.local_port = random.randint(10000, 20000)
 
         # Apply the service manifest
         # service_file = Path(__file__).parent / "test-circuit-breaker-service.yaml"
@@ -173,7 +173,7 @@ class LNBasicTest(TestBase):
             raise
 
         self.pf = subprocess.Popen(
-            ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{self.cb_port}"],
+            ["kubectl", "port-forward", f"svc/{service_name}", f"{self.local_port}:{self.cb_port}"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -185,7 +185,7 @@ class LNBasicTest(TestBase):
 
         self.service_to_cleanup = service_name
 
-        service_url = f"http://{service_name}:{local_port}/api"
+        service_url = f"http://{service_name}:{self.local_port}/api"
 
         return service_url
 
