@@ -27,16 +27,16 @@ class LNBasicTest(TestBase):
             "tank-0004-ln",
             "tank-0005-ln",
         ]
-        
+
         self.cb_port = 9235
         self.cb_node = "tank-0003-ln"
         self.port_forward = None
-        
+
     def run_test(self):
         try:
             # Wait for all nodes to wake up. ln_init will start automatically
             self.setup_network()
-            
+
             # Test circuit breaker API
             self.test_circuit_breaker_api()
 
@@ -130,45 +130,45 @@ class LNBasicTest(TestBase):
         scenario_file = self.scen_dir / "test_scenarios" / "ln_init.py"
         self.log.info(f"Running scenario from: {scenario_file}")
         self.warnet(f"run {scenario_file} --source_dir={self.scen_dir} --debug")
-        
+
     def test_circuit_breaker_api(self):
         self.log.info("Testing Circuit Breaker API")
-        
-         # Set up port forwarding to the circuit breaker
+
+        # Set up port forwarding to the circuit breaker
         cb_url = self.setup_api_access(self.cb_node)
-        
+
         self.log.info(f"Testing Circuit Breaker API at {cb_url}")
-        
+
         # Test /info endpoint
         info = self.cb_api_request(cb_url, "get", "/info")
         assert "version" in info, "Circuit breaker info missing version"
-        
+
         # Test /limits endpoint
         limits = self.cb_api_request(cb_url, "get", "/limits")
         assert isinstance(limits, dict), "Limits should be a dictionary"
-        
+
         self.log.info("✅ Circuit Breaker API tests passed")
-        
+
     def setup_api_access(self, pod_name):
         """Set up local port forwarding to the circuit breaker"""
         port = random.randint(10000, 20000)
         self.log.info(f"Setting up port-forward {port}:9235 to {pod_name}")
-                             
+
         self.port_forward = subprocess.Popen(
-        ["kubectl", "port-forward", pod_name, f"{port}:{self.cb_port}"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        # prevent subprocess from holding up execution
-        start_new_session=True  
+            ["kubectl", "port-forward", pod_name, f"{port}:{self.cb_port}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            # prevent subprocess from holding up execution
+            start_new_session=True,
         )
-        
+
         cb_url = f"http://localhost:{port}/api"
         if not self.wait_for_port_forward_ready(cb_url):
             self.port_forward.terminate()
             raise Exception("Port-forward failed to become ready")
-    
+
         return cb_url
-    
+
     def wait_for_port_forward_ready(self, cb_url, timeout=60):
         """Wait until we can successfully connect to the API"""
         start_time = time.time()
@@ -180,7 +180,7 @@ class LNBasicTest(TestBase):
             except requests.exceptions.RequestException:
                 time.sleep(1)
         return False
-    
+
     def cb_api_request(self, base_url, method, endpoint, data=None):
         url = f"{base_url}{endpoint}"
         try:
@@ -190,7 +190,7 @@ class LNBasicTest(TestBase):
                 response = requests.post(url, json=data)
             else:
                 raise ValueError(f"Unsupported method: {method}")
-            
+
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
