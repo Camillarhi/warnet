@@ -178,40 +178,39 @@ class LNBasicTest(TestBase):
         """Simplified API request using predefined service"""
         try:
             # Parse service name from URL
-            service_name = base_url.split('://')[1].split(':')[0]
-            port = base_url.split(':')[2].split('/')[0]
-            
+            service_name = base_url.split("://")[1].split(":")[0]
+            port = base_url.split(":")[2].split("/")[0]
+
             # Use port-forwarding
             local_port = random.randint(10000, 20000)
             pf = subprocess.Popen(
-                ["kubectl", "port-forward", f"svc/{service_name}", 
-                f"{local_port}:{port}"],
+                ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{port}"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
             )
-            
+
             try:
                 time.sleep(2)  # Wait for port-forward
-                
+
                 # Construct URL with proper path handling
                 full_url = f"http://localhost:{local_port}{endpoint}"
-                
-                if method.lower() == 'get':
+
+                if method.lower() == "get":
                     response = requests.get(full_url, timeout=30)
                 else:
                     response = requests.post(full_url, json=data, timeout=30)
-                    
+
                 response.raise_for_status()
                 return response.json()
-                
+
             finally:
                 pf.terminate()
                 pf.wait()
-                
+
         except Exception as e:
             self.log.error(f"API request failed: {str(e)}")
             raise
-   
+
     def cleanup_kubectl_created_services(self):
         """Clean up any created resources"""
         if hasattr(self, "service_to_cleanup") and self.service_to_cleanup:
