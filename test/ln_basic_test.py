@@ -2,11 +2,13 @@
 
 import json
 import os
+import random
 import subprocess
 import time
 from pathlib import Path
 from time import sleep
 
+import requests
 from test_base import TestBase
 
 from warnet.process import stream_command
@@ -174,7 +176,7 @@ class LNBasicTest(TestBase):
             self.log.error(f"Failed to create service: {e.stderr}")
             raise
 
-        time.sleep(0.01)
+        time.sleep(50)  # Wait for the service to be created
 
         service_url = f"http://{service_name}:{self.cb_port}/api"
         self.service_to_cleanup = service_name
@@ -184,48 +186,58 @@ class LNBasicTest(TestBase):
         return service_url
 
     def cb_api_request(self, base_url, method, endpoint, data=None):
-        """Make API requests using kubectl run curl-test approach"""
         try:
-            # Build the curl command
-            curl_cmd = [
-                "kubectl",
-                "exec",
-                self.cb_node,
-                "--",
-                "curl",
-                "-sS",
-                "-X",
-                method.upper(),
-                f"{base_url}{endpoint}",
-            ]
+            _, netloc_path = base_url.split("://", 1)
+            netloc, *path_parts = netloc_path.split("/")
+            service_name, _, port = netloc.partition(":")
+            port = port or "80"  # Default port if not specified
+            base_path = "/" + "/".join(path_parts) if path_parts else "/"
 
-            if data:
-                curl_cmd.extend(["-d", json.dumps(data), "-H", "Content-Type: application/json"])
+            # Set up port forwarding with context manager
+            local_port = random.randint(10000, 20000)
+            with self._port_forward(service_name, port, local_port):
+                # Construct URL using urllib.parse for robustness
+                full_url = f"http://localhost:{local_port}{base_path.rstrip('/')}/{endpoint.lstrip('/')}"
+                self.log.debug(f"API request to: {full_url}")
 
-            # Run the command and capture output
-            result = subprocess.run(curl_cmd, check=True, capture_output=True, text=True)
+                response = self._make_request(method, full_url, data)
+                response.raise_for_status()
+                return response.json()
 
-            output = result.stdout.strip()
-            if 'pod "curl-test" deleted' in output:
-                output = output.replace('pod "curl-test" deleted', "").strip()
-
-            return json.loads(output)
-        except subprocess.CalledProcessError as e:
-            self.log.error(f"API request failed: {e.stderr}")
-            raise
-        except json.JSONDecodeError:
-            self.log.error(f"Invalid JSON response: {result.stdout}")
+        except Exception as e:
+            self.log.error(f"API request failed: {str(e)}")
             raise
 
+    def _port_forward(self, service_name, port, local_port):
+        """Context manager for port forwarding"""
+        pf = subprocess.Popen(
+            ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{port}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        time.sleep(2)  # Allow port-forward to establish
+        try:
+            yield pf
+        finally:
+            pf.terminate()
+            pf.wait()
+
+    def _make_request(self, method, url, data=None):
+        """Helper method for making HTTP requests"""
+        kwargs = {"timeout": 30}
+        if data:
+            kwargs["json"] = data
+        return requests.request(method.lower(), url, **kwargs)
+        
     def cleanup_kubectl_created_services(self):
-        """Clean up any created resources"""
-        if hasattr(self, "service_to_cleanup") and self.service_to_cleanup:
-            self.log.info(f"Deleting service {self.service_to_cleanup}")
-            subprocess.run(
-                ["kubectl", "delete", "svc", self.service_to_cleanup],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            """Clean up any created resources"""
+            if hasattr(self, "service_to_cleanup") and self.service_to_cleanup:
+                self.log.info(f"Deleting service {self.service_to_cleanup}")
+                subprocess.run(
+                    ["kubectl", "delete", "svc", self.service_to_cleanup],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
 
 
 if __name__ == "__main__":
