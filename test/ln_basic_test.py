@@ -189,47 +189,46 @@ class LNBasicTest(TestBase):
         """Universal API request handler with proper path handling"""
         try:
             # Parse the base URL components
-            url_parts = base_url.split('://')[1].split('/')
-            service_name = url_parts[0].split(':')[0]
-            port = url_parts[0].split(':')[1] if ':' in url_parts[0] else '80'
-            base_path = '/' + '/'.join(url_parts[1:]) if len(url_parts) > 1 else '/'
+            url_parts = base_url.split("://")[1].split("/")
+            service_name = url_parts[0].split(":")[0]
+            port = url_parts[0].split(":")[1] if ":" in url_parts[0] else "80"
+            base_path = "/" + "/".join(url_parts[1:]) if len(url_parts) > 1 else "/"
 
             # Set up port forwarding
             local_port = random.randint(10000, 20000)
             pf = subprocess.Popen(
-                ["kubectl", "port-forward", f"svc/{service_name}", 
-                f"{local_port}:{port}"],
+                ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{port}"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
             )
-            
+
             try:
                 # Wait for port-forward to establish
                 time.sleep(2)
-                
+
                 # Construct the full local URL with proper path handling
-                full_path = base_path.rstrip('/') + '/' + endpoint.lstrip('/')
+                full_path = base_path.rstrip("/") + "/" + endpoint.lstrip("/")
                 local_url = f"http://localhost:{local_port}{full_path}"
-                
+
                 self.log.debug(f"Attempting API request to: {local_url}")
-                
+
                 # Make the request
-                if method.lower() == 'get':
+                if method.lower() == "get":
                     response = requests.get(local_url, timeout=30)
                 else:
                     response = requests.post(local_url, json=data, timeout=30)
-                    
+
                 response.raise_for_status()
                 return response.json()
-                
+
             finally:
                 pf.terminate()
                 pf.wait()
-                
+
         except Exception as e:
             self.log.error(f"API request to {local_url} failed: {str(e)}")
             raise
-    
+
     def cleanup_kubectl_created_services(self):
         """Clean up any created resources"""
         if hasattr(self, "service_to_cleanup") and self.service_to_cleanup:
