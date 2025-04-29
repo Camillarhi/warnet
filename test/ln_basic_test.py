@@ -191,7 +191,7 @@ class LNBasicTest(TestBase):
 
     def cb_api_request(self, base_url, method, endpoint, data=None):
         try:
-            full_url = f"http://localhost:{local_port}/api{endpoint}"
+            full_url = f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
             self.log.debug(f"Attempting request to: {full_url}")
 
             # Make request with retries
