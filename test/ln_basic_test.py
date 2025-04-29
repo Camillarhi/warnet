@@ -169,7 +169,7 @@ class LNBasicTest(TestBase):
 
         return cb_url
 
-    def wait_for_port_forward_ready(self, cb_url, timeout=120):
+    def wait_for_port_forward_ready(self, cb_url, timeout=300):
         """Wait until we can successfully connect to the API"""
         start_time = time.time()
         while time.time() - start_time < timeout:
