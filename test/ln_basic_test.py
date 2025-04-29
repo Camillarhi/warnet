@@ -161,7 +161,7 @@ class LNBasicTest(TestBase):
         service_file = Path(__file__).parent / "test-circuit-breaker-service.yaml"
         try:
             subprocess.run(
-                ["kubectl", "apply", "-f", str(service_file)],
+                ["kubectl", "apply", "-f", str(self.cb_service_file)],
                 check=True,
                 capture_output=True,
                 text=True,
