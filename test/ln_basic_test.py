@@ -3,6 +3,7 @@
 import json
 import os
 import random
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -175,41 +176,72 @@ class LNBasicTest(TestBase):
         return service_url
 
     def cb_api_request(self, base_url, method, endpoint, data=None):
-        """Simplified API request using predefined service"""
+        """Robust API request with port-forward verification"""
         try:
-            # Parse service name from URL
+            # Parse service name and port
             service_name = base_url.split("://")[1].split(":")[0]
             port = base_url.split(":")[2].split("/")[0]
-
-            # Use port-forwarding
             local_port = random.randint(10000, 20000)
+
+            # Start port-forward with proper error capture
             pf = subprocess.Popen(
                 ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{port}"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                text=True,
             )
 
             try:
-                time.sleep(2)  # Wait for port-forward
+                # Wait for port-forward to be ready
+                if not self._wait_for_port_forward(pf, local_port):
+                    raise Exception("Port-forward failed to start")
 
-                # Construct URL with proper path handling
+                # Construct URL - note the fixed /api path
                 full_url = f"http://localhost:{local_port}/api{endpoint}"
+                self.log.debug(f"Attempting request to: {full_url}")
 
-                if method.lower() == "get":
-                    response = requests.get(full_url, timeout=30)
-                else:
-                    response = requests.post(full_url, json=data, timeout=30)
+                # Make request with retries
+                for attempt in range(3):
+                    try:
+                        if method.lower() == "get":
+                            response = requests.get(full_url, timeout=10)
+                        else:
+                            response = requests.post(full_url, json=data, timeout=10)
 
-                response.raise_for_status()
-                return response.json()
+                        response.raise_for_status()
+                        return response.json()
+
+                    except requests.exceptions.ConnectionError:
+                        if attempt == 2:
+                            raise
+                        time.sleep(1)  # Wait before retry
 
             finally:
                 pf.terminate()
                 pf.wait()
 
         except Exception as e:
-            self.log.error(f"API request failed: {str(e)}")
+            self.log.error(f"API request to {full_url} failed: {str(e)}")
+            if "pf" in locals():
+                self.log.error(f"Port-forward stderr: {pf.stderr.read()}")
             raise
+
+    def _wait_for_port_forward(self, pf, port, timeout=10):
+        """Wait until port-forward is actually ready"""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            # Check if port-forward process failed
+            if pf.poll() is not None:
+                return False
+
+            # Check if port is listening
+            try:
+                with socket.create_connection(("localhost", port), timeout=1):
+                    return True
+            except (socket.timeout, ConnectionRefusedError):
+                time.sleep(0.1)
+
+        return False
 
     def cleanup_kubectl_created_services(self):
         """Clean up any created resources"""
