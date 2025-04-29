@@ -3,9 +3,9 @@
 import json
 import os
 import random
+import requests
 import subprocess
 import time
-import requests
 from pathlib import Path
 from time import sleep
 
