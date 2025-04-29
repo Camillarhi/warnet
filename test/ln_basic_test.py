@@ -19,6 +19,7 @@ class LNBasicTest(TestBase):
         super().__init__()
         self.network_dir = Path(os.path.dirname(__file__)) / "data" / "ln"
         self.scen_dir = Path(os.path.dirname(__file__)).parent / "resources" / "scenarios"
+        self.cb_service_file= Path(os.path.dirname(__file__)) / "data" / "ln" / "test-circuit-breaker-service.yaml"
         self.lns = [
             "tank-0000-ln",
             "tank-0001-ln",
@@ -151,38 +152,24 @@ class LNBasicTest(TestBase):
         self.log.info("✅ Circuit Breaker API tests passed")
 
     def setup_api_access(self, pod_name):
-        """Set up Kubernetes Service access to the Circuit Breaker API"""
-        # Create a properly labeled service using kubectl expose
-        service_name = f"{pod_name}-svc"
-
-        self.log.info(f"Creating service {service_name} for pod {pod_name}")
+        """Set up access using predefined Service manifest"""
+        service_name = "tank-0003-ln-cb-test"
+        
+        # Apply the service manifest
+        service_file = Path(__file__).parent / "test-circuit-breaker-service.yaml"
         try:
             subprocess.run(
-                [
-                    "kubectl",
-                    "expose",
-                    "pod",
-                    pod_name,
-                    "--name",
-                    service_name,
-                    "--port",
-                    str(self.cb_port),
-                    "--target-port",
-                    str(self.cb_port),
-                ],
+                ["kubectl", "apply", "-f", str(service_file)],
                 check=True,
+                capture_output=True,
+                text=True
             )
         except subprocess.CalledProcessError as e:
             self.log.error(f"Failed to create service: {e.stderr}")
             raise
-
-        time.sleep(51)  # Wait for the service to be created
-
+        
         service_url = f"http://{service_name}:{self.cb_port}/api"
-        self.service_to_cleanup = service_name
-        self.log.info(f"Service URL: {service_url}")
-
-        self.log.info(f"Successfully created service at {service_url}")
+        
         return service_url
 
     def cb_api_request(self, base_url, method, endpoint, data=None):
