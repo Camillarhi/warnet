@@ -197,7 +197,9 @@ class LNBasicTest(TestBase):
             local_port = random.randint(10000, 20000)
             with self._port_forward(service_name, port, local_port):
                 # Construct URL using urllib.parse for robustness
-                full_url = f"http://localhost:{local_port}{base_path.rstrip('/')}/{endpoint.lstrip('/')}"
+                full_url = (
+                    f"http://localhost:{local_port}{base_path.rstrip('/')}/{endpoint.lstrip('/')}"
+                )
                 self.log.debug(f"API request to: {full_url}")
 
                 response = self._make_request(method, full_url, data)
@@ -228,16 +230,16 @@ class LNBasicTest(TestBase):
         if data:
             kwargs["json"] = data
         return requests.request(method.lower(), url, **kwargs)
-        
+
     def cleanup_kubectl_created_services(self):
-            """Clean up any created resources"""
-            if hasattr(self, "service_to_cleanup") and self.service_to_cleanup:
-                self.log.info(f"Deleting service {self.service_to_cleanup}")
-                subprocess.run(
-                    ["kubectl", "delete", "svc", self.service_to_cleanup],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+        """Clean up any created resources"""
+        if hasattr(self, "service_to_cleanup") and self.service_to_cleanup:
+            self.log.info(f"Deleting service {self.service_to_cleanup}")
+            subprocess.run(
+                ["kubectl", "delete", "svc", self.service_to_cleanup],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
 
 if __name__ == "__main__":
