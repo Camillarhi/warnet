@@ -193,7 +193,7 @@ class LNBasicTest(TestBase):
                 time.sleep(2)  # Wait for port-forward
 
                 # Construct URL with proper path handling
-                full_url = f"http://localhost:{local_port}{endpoint}"
+                full_url = f"http://localhost:{local_port}/api{endpoint}"
 
                 if method.lower() == "get":
                     response = requests.get(full_url, timeout=30)
