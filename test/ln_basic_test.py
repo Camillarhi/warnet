@@ -174,7 +174,7 @@ class LNBasicTest(TestBase):
             self.log.error(f"Failed to create service: {e.stderr}")
             raise
 
-        time.sleep(50) # Wait for the service to be created
+        time.sleep(51) # Wait for the service to be created
 
         service_url = f"http://{service_name}:{self.cb_port}/api"
         self.service_to_cleanup = service_name
