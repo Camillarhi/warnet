@@ -175,17 +175,13 @@ class LNBasicTest(TestBase):
 
         return service_url
 
-    def cb_api_request(self, base_url, method, endpoint, data=None):
-        """Robust API request with port-forward verification"""
+    def cb_api_request(self, base_url, method, endpoint, service_name, data=None):
         try:
-            # Parse service name and port
-            service_name = base_url.split("://")[1].split(":")[0]
-            port = base_url.split(":")[2].split("/")[0]
             local_port = random.randint(10000, 20000)
 
             # Start port-forward with proper error capture
             pf = subprocess.Popen(
-                ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{port}"],
+                ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{self.cb_port}"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -196,11 +192,9 @@ class LNBasicTest(TestBase):
                 if not self._wait_for_port_forward(pf, local_port):
                     raise Exception("Port-forward failed to start")
 
-                # Construct URL - note the fixed /api path
                 full_url = f"http://localhost:{local_port}/api{endpoint}"
                 self.log.debug(f"Attempting request to: {full_url}")
 
-                # Make request with retries
                 for attempt in range(3):
                     try:
                         if method.lower() == "get":
@@ -230,11 +224,9 @@ class LNBasicTest(TestBase):
         """Wait until port-forward is actually ready"""
         start_time = time.time()
         while time.time() - start_time < timeout:
-            # Check if port-forward process failed
             if pf.poll() is not None:
                 return False
 
-            # Check if port is listening
             try:
                 with socket.create_connection(("localhost", port), timeout=1):
                     return True
