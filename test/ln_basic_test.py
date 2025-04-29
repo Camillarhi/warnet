@@ -216,21 +216,17 @@ class LNBasicTest(TestBase):
                 self.log.error(f"Port-forward stderr: {self.pf.stderr.read()}")
             raise
 
-    def _wait_for_port_forward(self, pf, port, timeout=10):
-        """Wait until port-forward is actually ready"""
+    def _wait_for_port_forward(self, timeout=10):
+        """Check if port-forward is ready"""
         start_time = time.time()
         while time.time() - start_time < timeout:
-            # Check if port-forward process failed
-            if pf.poll() is not None:
+            if self.pf.poll() is not None:
                 return False
-
-            # Check if port is listening
             try:
-                with socket.create_connection(("localhost", port), timeout=1):
+                with socket.create_connection(("localhost", self.local_port), timeout=1):
                     return True
             except (socket.timeout, ConnectionRefusedError):
                 time.sleep(0.1)
-
         return False
 
     def cleanup_kubectl_created_services(self):
