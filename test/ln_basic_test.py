@@ -196,7 +196,6 @@ class LNBasicTest(TestBase):
                 "-sS",
                 "-X",
                 method.upper(),
-                method.upper(),
                 f"{base_url}{endpoint}",
             ]
 
