@@ -154,25 +154,45 @@ class LNBasicTest(TestBase):
         """Set up Kubernetes Service access to the Circuit Breaker API"""
         # Create a properly labeled service using kubectl expose
         service_name = f"{pod_name}-svc"
-        
+
         self.log.info(f"Creating service {service_name} for pod {pod_name}")
         try:
-            subprocess.run([
-                "kubectl", "expose", "pod", pod_name,
-                "--name", service_name,
-                "--port", str(self.cb_port),
-                "--target-port", str(self.cb_port)
-            ], check=True, capture_output=True, text=True)
+            subprocess.run(
+                [
+                    "kubectl",
+                    "expose",
+                    "pod",
+                    pod_name,
+                    "--name",
+                    service_name,
+                    "--port",
+                    str(self.cb_port),
+                    "--target-port",
+                    str(self.cb_port),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
         except subprocess.CalledProcessError as e:
             self.log.error(f"Failed to create service: {e.stderr}")
             raise Exception(f"Service creation failed: {e.stderr}")
-            
+
         # Verify service endpoints exist
         def verify_endpoints():
             try:
                 result = subprocess.run(
-                    ["kubectl", "get", "endpoints", service_name, "-o", "jsonpath='{.subsets[*].addresses[*].ip}'"],
-                    capture_output=True, text=True, check=True
+                    [
+                        "kubectl",
+                        "get",
+                        "endpoints",
+                        service_name,
+                        "-o",
+                        "jsonpath='{.subsets[*].addresses[*].ip}'",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
                 )
                 return bool(result.stdout.strip())
             except subprocess.CalledProcessError:
@@ -181,12 +201,12 @@ class LNBasicTest(TestBase):
         if not self.wait_for_predicate(verify_endpoints, timeout=30):
             self.cleanup()
             raise Exception("Service endpoints never became available")
-        
+
         # Get service URL
         service_url = f"http://{service_name}:{self.cb_port}/api"
         self.service_to_cleanup = service_name
         self.log.info(f"Service URL: {service_url}")
-        
+
         # Verify the API is responsive
         if not self.wait_for_port_forward_ready(service_url):
             self.cleanup()
@@ -211,7 +231,7 @@ class LNBasicTest(TestBase):
                 time.sleep(retry_interval)
         self.log.error(f"Port forward not ready after {timeout} seconds")
         return False
-    
+
     def cb_api_request(self, base_url, method, endpoint, data=None):
         url = f"{base_url}{endpoint}"
         try:
@@ -230,13 +250,14 @@ class LNBasicTest(TestBase):
 
     def cleanup_kubectl_creted_services(self):
         """Clean up any created resources"""
-        if hasattr(self, 'service_to_cleanup') and self.service_to_cleanup:
+        if hasattr(self, "service_to_cleanup") and self.service_to_cleanup:
             self.log.info(f"Deleting service {self.service_to_cleanup}")
             subprocess.run(
                 ["kubectl", "delete", "svc", self.service_to_cleanup],
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
             )
+
 
 if __name__ == "__main__":
     test = LNBasicTest()
