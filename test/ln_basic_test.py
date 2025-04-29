@@ -140,6 +140,7 @@ class LNBasicTest(TestBase):
 
     def test_circuit_breaker_api(self):
         self.log.info("Testing Circuit Breaker API")
+        
 
         # Set up port forwarding to the circuit breaker
         cb_url = self.setup_api_access(self.cb_node)
