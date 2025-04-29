@@ -157,6 +157,7 @@ class LNBasicTest(TestBase):
     def setup_api_access(self, pod_name):
         """Set up access using predefined Service manifest"""
         service_name = "tank-0003-ln-cb-test"
+        self.local_port = random.randint(10000, 20000)
 
         # Apply the service manifest
         # service_file = Path(__file__).parent / "test-circuit-breaker-service.yaml"
@@ -171,58 +172,48 @@ class LNBasicTest(TestBase):
             self.log.error(f"Failed to create service: {e.stderr}")
             raise
 
+        self.pf = subprocess.Popen(
+            ["kubectl", "port-forward", f"svc/{service_name}", f"{self.local_port}:{self.cb_port}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        if not self._wait_for_port_forward():
+            self.pf.terminate()
+            raise Exception("Port-forward failed to start")
+
+        self.service_to_cleanup = service_name
+
         service_url = f"http://{service_name}:{self.cb_port}/api"
 
         return service_url
 
     def cb_api_request(self, base_url, method, endpoint, data=None):
         try:
-            # Parse service name and port
-            service_name = base_url.split("://")[1].split(":")[0]
-            port = base_url.split(":")[2].split("/")[0]
-            local_port = random.randint(10000, 20000)
+            full_url = f"http://localhost:{local_port}/api{endpoint}"
+            self.log.debug(f"Attempting request to: {full_url}")
 
-            # Start port-forward with proper error capture
-            pf = subprocess.Popen(
-                ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{port}"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-
-            try:
-                # Wait for port-forward to be ready
-                if not self._wait_for_port_forward(pf, local_port):
-                    raise Exception("Port-forward failed to start")
-
-                # Construct URL - note the fixed /api path
-                full_url = f"http://localhost:{local_port}/api{endpoint}"
-                self.log.debug(f"Attempting request to: {full_url}")
-
-                # Make request with retries
-                for attempt in range(3):
-                    try:
-                        if method.lower() == "get":
-                            response = requests.get(full_url, timeout=10)
-                        else:
-                            response = requests.post(full_url, json=data, timeout=10)
+            # Make request with retries
+            for attempt in range(3):
+                try:
+                    if method.lower() == "get":
+                        response = requests.get(full_url, timeout=10)
+                    else:
+                        response = requests.post(full_url, json=data, timeout=10)
 
                         response.raise_for_status()
                         return response.json()
 
-                    except requests.exceptions.ConnectionError:
-                        if attempt == 2:
-                            raise
-                        time.sleep(1)  # Wait before retry
-
-            finally:
-                pf.terminate()
-                pf.wait()
+                except requests.exceptions.ConnectionError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(1)  # Wait before retry
 
         except Exception as e:
             self.log.error(f"API request to {full_url} failed: {str(e)}")
-            if "pf" in locals():
-                self.log.error(f"Port-forward stderr: {pf.stderr.read()}")
+            if hasattr(self, "pf"):
+                self.log.error(f"Port-forward stderr: {self.pf.stderr.read()}")
             raise
 
     def _wait_for_port_forward(self, pf, port, timeout=10):
