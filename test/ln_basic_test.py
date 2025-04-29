@@ -7,7 +7,6 @@ import time
 from pathlib import Path
 from time import sleep
 
-import requests
 from test_base import TestBase
 
 from warnet.process import stream_command
@@ -49,7 +48,7 @@ class LNBasicTest(TestBase):
             self.pay_invoice(sender="tank-0000-ln", recipient="tank-0002-ln")
 
         finally:
-            self.cleanup_kubectl_creted_services()
+            self.cleanup_kubectl_created_services()
             self.cleanup()
 
     def setup_network(self):
@@ -170,84 +169,59 @@ class LNBasicTest(TestBase):
                     str(self.cb_port),
                 ],
                 check=True,
-                capture_output=True,
-                text=True,
             )
         except subprocess.CalledProcessError as e:
             self.log.error(f"Failed to create service: {e.stderr}")
             raise
 
-        # Verify service endpoints exist
-        def verify_endpoints():
-            try:
-                result = subprocess.run(
-                    [
-                        "kubectl",
-                        "get",
-                        "endpoints",
-                        service_name,
-                        "-o",
-                        "jsonpath='{.subsets[*].addresses[*].ip}'",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                return bool(result.stdout.strip())
-            except subprocess.CalledProcessError:
-                return False
+        time.sleep(0.01)
 
-        if not self.wait_for_predicate(verify_endpoints, timeout=30):
-            self.cleanup()
-            raise Exception("Service endpoints never became available")
-
-        # Get service URL
         service_url = f"http://{service_name}:{self.cb_port}/api"
         self.service_to_cleanup = service_name
         self.log.info(f"Service URL: {service_url}")
 
-        # Verify the API is responsive
-        if not self.wait_for_port_forward_ready(service_url):
-            self.cleanup()
-            raise Exception("Service API never became responsive")
-
         self.log.info(f"Successfully created service at {service_url}")
         return service_url
 
-    def wait_for_port_forward_ready(self, cb_url, timeout=300, retry_interval=5):
-        """Wait until we can successfully connect to the API"""
-        start_time = time.time()
-        attempts = 0
-        while time.time() - start_time < timeout:
-            attempts += 1
-            try:
-                response = requests.get(f"{cb_url}/info", timeout=2)
-                if response.status_code == 200:
-                    self.log.info(f"Port forward ready after {attempts} attempts")
-                    return True
-            except requests.exceptions.RequestException as e:
-                self.log.debug(f"Attempt {attempts} failed: {str(e)}")
-                time.sleep(retry_interval)
-        self.log.error(f"Port forward not ready after {timeout} seconds")
-        return False
-
     def cb_api_request(self, base_url, method, endpoint, data=None):
-        url = f"{base_url}{endpoint}"
+        """Make API requests using kubectl run curl-test approach"""
         try:
-            if method == "get":
-                response = requests.get(url)
-            elif method == "post":
-                response = requests.post(url, json=data)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
+            # Build the curl command
+            curl_cmd = [
+                "kubectl",
+                "run",
+                "curl-test",
+                "--image=curlimages/curl",
+                "-it",
+                "--rm",
+                "--restart=Never",
+                "--",
+                "curl",
+                "-s",
+                "-X",
+                method.upper(),
+                f"{base_url}{endpoint}",
+            ]
 
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            self.log.error(f"Circuit Breaker API request failed: {e}")
+            if data:
+                curl_cmd.extend(["-d", json.dumps(data), "-H", "Content-Type: application/json"])
+
+            # Run the command and capture output
+            result = subprocess.run(curl_cmd, check=True, capture_output=True, text=True)
+
+            output = result.stdout.strip()
+            if 'pod "curl-test" deleted' in output:
+                output = output.replace('pod "curl-test" deleted', "").strip()
+
+            return json.loads(output)
+        except subprocess.CalledProcessError as e:
+            self.log.error(f"API request failed: {e.stderr}")
+            raise
+        except json.JSONDecodeError:
+            self.log.error(f"Invalid JSON response: {result.stdout}")
             raise
 
-    def cleanup_kubectl_creted_services(self):
+    def cleanup_kubectl_created_services(self):
         """Clean up any created resources"""
         if hasattr(self, "service_to_cleanup") and self.service_to_cleanup:
             self.log.info(f"Deleting service {self.service_to_cleanup}")
