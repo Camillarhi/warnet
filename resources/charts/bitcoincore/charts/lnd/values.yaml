@@ -135,5 +135,5 @@ channels: []
 
 circuitbreaker:
   enabled: false  # Default to disabled
-  image: carlakirkcohen/circuitbreaker:attackathon-ln_51_attacker
+  image: carlakirkcohen/circuitbreaker:attackathon-test
   httpPort: 9235
