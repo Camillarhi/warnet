@@ -189,16 +189,13 @@ class LNBasicTest(TestBase):
             # Build the curl command
             curl_cmd = [
                 "kubectl",
-                "run",
-                "curl-test",
-                "--image=curlimages/curl",
-                "--rm",
-                "--restart=Never",
-                "--quiet",
+                "exec",
+                self.cb_node,
                 "--",
                 "curl",
                 "-sS",
                 "-X",
+                method.upper(),
                 method.upper(),
                 f"{base_url}{endpoint}",
             ]
