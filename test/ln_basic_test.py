@@ -2,9 +2,14 @@
 
 import json
 import os
+import random
+import socket
+import subprocess
+import time
 from pathlib import Path
 from time import sleep
 
+import requests
 from test_base import TestBase
 
 from warnet.process import stream_command
@@ -15,6 +20,9 @@ class LNBasicTest(TestBase):
         super().__init__()
         self.network_dir = Path(os.path.dirname(__file__)) / "data" / "ln"
         self.scen_dir = Path(os.path.dirname(__file__)).parent / "resources" / "scenarios"
+        self.cb_service_file = (
+            Path(os.path.dirname(__file__)) / "data" / "ln" / "test-circuit-breaker-service.yaml"
+        )
         self.lns = [
             "tank-0000-ln",
             "tank-0001-ln",
@@ -24,10 +32,17 @@ class LNBasicTest(TestBase):
             "tank-0005-ln",
         ]
 
+        self.cb_port = 9235
+        self.cb_node = "tank-0003-ln"
+        self.port_forward = None
+
     def run_test(self):
         try:
             # Wait for all nodes to wake up. ln_init will start automatically
             self.setup_network()
+
+            # Test circuit breaker API
+            self.test_circuit_breaker_api()
 
             # Send a payment across channels opened automatically by ln_init
             self.pay_invoice(sender="tank-0005-ln", recipient="tank-0003-ln")
@@ -39,6 +54,7 @@ class LNBasicTest(TestBase):
             self.pay_invoice(sender="tank-0000-ln", recipient="tank-0002-ln")
 
         finally:
+            self.cleanup_kubectl_created_services()
             self.cleanup()
 
     def setup_network(self):
@@ -119,6 +135,109 @@ class LNBasicTest(TestBase):
         scenario_file = self.scen_dir / "test_scenarios" / "ln_init.py"
         self.log.info(f"Running scenario from: {scenario_file}")
         self.warnet(f"run {scenario_file} --source_dir={self.scen_dir} --debug")
+
+    def test_circuit_breaker_api(self):
+        self.log.info("Testing Circuit Breaker API")
+
+        # Set up port forwarding to the circuit breaker
+        cb_url = self.setup_api_access(self.cb_node)
+
+        self.log.info(f"Testing Circuit Breaker API at {cb_url}")
+
+        # Test /info endpoint
+        info = self.cb_api_request(cb_url, "get", "/info")
+        assert "version" in info, "Circuit breaker info missing version"
+
+        # Test /limits endpoint
+        limits = self.cb_api_request(cb_url, "get", "/limits")
+        assert isinstance(limits, dict), "Limits should be a dictionary"
+
+        self.log.info("✅ Circuit Breaker API tests passed")
+
+    def setup_api_access(self, pod_name):
+        """Set up access using predefined Service manifest"""
+        service_name = "tank-0003-ln-cb-test"
+        self.local_port = random.randint(10000, 20000)
+
+        # Apply the service manifest
+        # service_file = Path(__file__).parent / "test-circuit-breaker-service.yaml"
+        try:
+            subprocess.run(
+                ["kubectl", "apply", "-f", str(self.cb_service_file)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            self.log.error(f"Failed to create service: {e.stderr}")
+            raise
+
+        self.pf = subprocess.Popen(
+            ["kubectl", "port-forward", f"svc/{service_name}", f"{self.local_port}:{self.cb_port}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        if not self._wait_for_port_forward():
+            self.pf.terminate()
+            raise Exception("Port-forward failed to start")
+
+        self.service_to_cleanup = service_name
+
+        service_url = f"http://{service_name}:{self.local_port}/api"
+
+        return service_url
+
+    def cb_api_request(self, base_url, method, endpoint, data=None):
+        try:
+            full_url = f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+            self.log.debug(f"Attempting request to: {full_url}")
+
+            # Make request with retries
+            for attempt in range(3):
+                try:
+                    if method.lower() == "get":
+                        response = requests.get(full_url, timeout=10)
+                    else:
+                        response = requests.post(full_url, json=data, timeout=10)
+
+                        response.raise_for_status()
+                        return response.json()
+
+                except requests.exceptions.ConnectionError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(1)  # Wait before retry
+
+        except Exception as e:
+            self.log.error(f"API request to {full_url} failed: {str(e)}")
+            if hasattr(self, "pf"):
+                self.log.error(f"Port-forward stderr: {self.pf.stderr.read()}")
+            raise
+
+    def _wait_for_port_forward(self, timeout=10):
+        """Check if port-forward is ready"""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if self.pf.poll() is not None:
+                return False
+            try:
+                with socket.create_connection(("localhost", self.local_port), timeout=1):
+                    return True
+            except (socket.timeout, ConnectionRefusedError):
+                time.sleep(0.1)
+        return False
+
+    def cleanup_kubectl_created_services(self):
+        """Clean up any created resources"""
+        if hasattr(self, "service_to_cleanup") and self.service_to_cleanup:
+            self.log.info(f"Deleting service {self.service_to_cleanup}")
+            subprocess.run(
+                ["kubectl", "delete", "svc", self.service_to_cleanup],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
 
 if __name__ == "__main__":
