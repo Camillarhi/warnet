@@ -158,7 +158,7 @@ class LNBasicTest(TestBase):
         service_name = "tank-0003-ln-cb-test"
 
         # Apply the service manifest
-        service_file = Path(__file__).parent / "test-circuit-breaker-service.yaml"
+        # service_file = Path(__file__).parent / "test-circuit-breaker-service.yaml"
         try:
             subprocess.run(
                 ["kubectl", "apply", "-f", str(self.cb_service_file)],
