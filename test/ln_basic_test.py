@@ -2,13 +2,12 @@
 
 import json
 import os
-import random
-import requests
 import subprocess
 import time
 from pathlib import Path
 from time import sleep
 
+import requests
 from test_base import TestBase
 
 from warnet.process import stream_command
@@ -176,7 +175,7 @@ class LNBasicTest(TestBase):
             )
         except subprocess.CalledProcessError as e:
             self.log.error(f"Failed to create service: {e.stderr}")
-            raise Exception(f"Service creation failed: {e.stderr}")
+            raise
 
         # Verify service endpoints exist
         def verify_endpoints():
