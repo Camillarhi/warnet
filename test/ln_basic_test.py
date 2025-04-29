@@ -19,7 +19,9 @@ class LNBasicTest(TestBase):
         super().__init__()
         self.network_dir = Path(os.path.dirname(__file__)) / "data" / "ln"
         self.scen_dir = Path(os.path.dirname(__file__)).parent / "resources" / "scenarios"
-        self.cb_service_file= Path(os.path.dirname(__file__)) / "data" / "ln" / "test-circuit-breaker-service.yaml"
+        self.cb_service_file = (
+            Path(os.path.dirname(__file__)) / "data" / "ln" / "test-circuit-breaker-service.yaml"
+        )
         self.lns = [
             "tank-0000-ln",
             "tank-0001-ln",
@@ -154,7 +156,7 @@ class LNBasicTest(TestBase):
     def setup_api_access(self, pod_name):
         """Set up access using predefined Service manifest"""
         service_name = "tank-0003-ln-cb-test"
-        
+
         # Apply the service manifest
         service_file = Path(__file__).parent / "test-circuit-breaker-service.yaml"
         try:
@@ -162,14 +164,14 @@ class LNBasicTest(TestBase):
                 ["kubectl", "apply", "-f", str(service_file)],
                 check=True,
                 capture_output=True,
-                text=True
+                text=True,
             )
         except subprocess.CalledProcessError as e:
             self.log.error(f"Failed to create service: {e.stderr}")
             raise
-        
+
         service_url = f"http://{service_name}:{self.cb_port}/api"
-        
+
         return service_url
 
     def cb_api_request(self, base_url, method, endpoint, data=None):
