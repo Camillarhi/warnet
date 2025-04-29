@@ -2,11 +2,13 @@
 
 import json
 import os
+import random
 import subprocess
 import time
 from pathlib import Path
 from time import sleep
 
+import requests
 from test_base import TestBase
 
 from warnet.process import stream_command
@@ -184,37 +186,42 @@ class LNBasicTest(TestBase):
         return service_url
 
     def cb_api_request(self, base_url, method, endpoint, data=None):
-        """Make API requests using kubectl run curl-test approach"""
+        """Universal API request handler that works everywhere"""
         try:
-            # Build the curl command
-            curl_cmd = [
-                "kubectl",
-                "exec",
-                self.cb_node,
-                "--",
-                "curl",
-                "-sS",
-                "-X",
-                method.upper(),
-                f"{base_url}{endpoint}",
-            ]
+            # Extract service name and port
+            service_name = base_url.split("://")[1].split(":")[0]
+            port = base_url.split(":")[2].split("/")[0]
 
-            if data:
-                curl_cmd.extend(["-d", json.dumps(data), "-H", "Content-Type: application/json"])
+            # Use port-forwarding as the universal solution
+            local_port = random.randint(10000, 20000)
+            pf = subprocess.Popen(
+                ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{port}"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
 
-            # Run the command and capture output
-            result = subprocess.run(curl_cmd, check=True, capture_output=True, text=True)
+            try:
+                # Wait for port-forward to establish
+                time.sleep(2)
 
-            output = result.stdout.strip()
-            if 'pod "curl-test" deleted' in output:
-                output = output.replace('pod "curl-test" deleted', "").strip()
+                # Use Python requests to call the local port
+                local_url = f"http://localhost:{local_port}{endpoint}"
 
-            return json.loads(output)
-        except subprocess.CalledProcessError as e:
-            self.log.error(f"API request failed: {e.stderr}")
-            raise
-        except json.JSONDecodeError:
-            self.log.error(f"Invalid JSON response: {result.stdout}")
+                if method.lower() == "get":
+                    response = requests.get(local_url, timeout=30)
+                else:
+                    response = requests.post(local_url, json=data, timeout=30)
+
+                response.raise_for_status()
+                return response.json()
+
+            finally:
+                # Ensure port-forward gets cleaned up
+                pf.terminate()
+                pf.wait()
+
+        except Exception as e:
+            self.log.error(f"API request failed: {str(e)}")
             raise
 
     def cleanup_kubectl_created_services(self):
