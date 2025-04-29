@@ -176,7 +176,7 @@ class LNBasicTest(TestBase):
             self.log.error(f"Failed to create service: {e.stderr}")
             raise
 
-        time.sleep(50)  # Wait for the service to be created
+        time.sleep(51)  # Wait for the service to be created
 
         service_url = f"http://{service_name}:{self.cb_port}/api"
         self.service_to_cleanup = service_name
@@ -186,50 +186,48 @@ class LNBasicTest(TestBase):
         return service_url
 
     def cb_api_request(self, base_url, method, endpoint, data=None):
+        """Universal API request handler with proper path handling"""
         try:
-            _, netloc_path = base_url.split("://", 1)
-            netloc, *path_parts = netloc_path.split("/")
-            service_name, _, port = netloc.partition(":")
-            port = port or "80"  # Default port if not specified
-            base_path = "/" + "/".join(path_parts) if path_parts else "/"
+            # Parse the base URL components
+            url_parts = base_url.split("://")[1].split("/")
+            service_name = url_parts[0].split(":")[0]
+            port = url_parts[0].split(":")[1] if ":" in url_parts[0] else "80"
+            base_path = "/" + "/".join(url_parts[1:]) if len(url_parts) > 1 else "/"
 
-            # Set up port forwarding with context manager
+            # Set up port forwarding
             local_port = random.randint(10000, 20000)
-            with self._port_forward(service_name, port, local_port):
-                # Construct URL using urllib.parse for robustness
-                full_url = (
-                    f"http://localhost:{local_port}{base_path.rstrip('/')}/{endpoint.lstrip('/')}"
-                )
-                self.log.debug(f"API request to: {full_url}")
+            pf = subprocess.Popen(
+                ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{port}"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
 
-                response = self._make_request(method, full_url, data)
+            try:
+                # Wait for port-forward to establish
+                time.sleep(2)
+
+                # Construct the full local URL with proper path handling
+                full_path = base_path.rstrip("/") + "/" + endpoint.lstrip("/")
+                local_url = f"http://localhost:{local_port}{full_path}"
+
+                self.log.debug(f"Attempting API request to: {local_url}")
+
+                # Make the request
+                if method.lower() == "get":
+                    response = requests.get(local_url, timeout=30)
+                else:
+                    response = requests.post(local_url, json=data, timeout=30)
+
                 response.raise_for_status()
                 return response.json()
 
+            finally:
+                pf.terminate()
+                pf.wait()
+
         except Exception as e:
-            self.log.error(f"API request failed: {str(e)}")
+            self.log.error(f"API request to {local_url} failed: {str(e)}")
             raise
-
-    def _port_forward(self, service_name, port, local_port):
-        """Context manager for port forwarding"""
-        pf = subprocess.Popen(
-            ["kubectl", "port-forward", f"svc/{service_name}", f"{local_port}:{port}"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        time.sleep(2)  # Allow port-forward to establish
-        try:
-            yield pf
-        finally:
-            pf.terminate()
-            pf.wait()
-
-    def _make_request(self, method, url, data=None):
-        """Helper method for making HTTP requests"""
-        kwargs = {"timeout": 30}
-        if data:
-            kwargs["json"] = data
-        return requests.request(method.lower(), url, **kwargs)
 
     def cleanup_kubectl_created_services(self):
         """Clean up any created resources"""
