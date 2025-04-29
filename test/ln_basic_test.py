@@ -50,6 +50,7 @@ class LNBasicTest(TestBase):
             self.pay_invoice(sender="tank-0000-ln", recipient="tank-0002-ln")
 
         finally:
+            self.cleanup_kubectl_creted_services()
             self.cleanup()
 
     def setup_network(self):
@@ -150,37 +151,67 @@ class LNBasicTest(TestBase):
         self.log.info("✅ Circuit Breaker API tests passed")
 
     def setup_api_access(self, pod_name):
-        """Set up local port forwarding to the circuit breaker"""
-        port = random.randint(10000, 20000)
-        self.log.info(f"Setting up port-forward {port}:9235 to {pod_name}")
+        """Set up Kubernetes Service access to the Circuit Breaker API"""
+        # Create a properly labeled service using kubectl expose
+        service_name = f"{pod_name}-svc"
+        
+        self.log.info(f"Creating service {service_name} for pod {pod_name}")
+        try:
+            subprocess.run([
+                "kubectl", "expose", "pod", pod_name,
+                "--name", service_name,
+                "--port", str(self.cb_port),
+                "--target-port", str(self.cb_port)
+            ], check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            self.log.error(f"Failed to create service: {e.stderr}")
+            raise Exception(f"Service creation failed: {e.stderr}")
+            
+        # Verify service endpoints exist
+        def verify_endpoints():
+            try:
+                result = subprocess.run(
+                    ["kubectl", "get", "endpoints", service_name, "-o", "jsonpath='{.subsets[*].addresses[*].ip}'"],
+                    capture_output=True, text=True, check=True
+                )
+                return bool(result.stdout.strip())
+            except subprocess.CalledProcessError:
+                return False
 
-        self.port_forward = subprocess.Popen(
-            ["kubectl", "port-forward", pod_name, f"{port}:{self.cb_port}"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            # prevent subprocess from holding up execution
-            start_new_session=True,
-        )
+        if not self.wait_for_predicate(verify_endpoints, timeout=30):
+            self.cleanup()
+            raise Exception("Service endpoints never became available")
+        
+        # Get service URL
+        service_url = f"http://{service_name}:{self.cb_port}/api"
+        self.service_to_cleanup = service_name
+        self.log.info(f"Service URL: {service_url}")
+        
+        # Verify the API is responsive
+        if not self.wait_for_port_forward_ready(service_url):
+            self.cleanup()
+            raise Exception("Service API never became responsive")
 
-        cb_url = f"http://localhost:{port}/api"
-        if not self.wait_for_port_forward_ready(cb_url):
-            self.port_forward.terminate()
-            raise Exception("Port-forward failed to become ready")
+        self.log.info(f"Successfully created service at {service_url}")
+        return service_url
 
-        return cb_url
-
-    def wait_for_port_forward_ready(self, cb_url, timeout=300):
+    def wait_for_port_forward_ready(self, cb_url, timeout=300, retry_interval=5):
         """Wait until we can successfully connect to the API"""
         start_time = time.time()
+        attempts = 0
         while time.time() - start_time < timeout:
+            attempts += 1
             try:
                 response = requests.get(f"{cb_url}/info", timeout=2)
                 if response.status_code == 200:
+                    self.log.info(f"Port forward ready after {attempts} attempts")
                     return True
-            except requests.exceptions.RequestException:
-                time.sleep(1)
+            except requests.exceptions.RequestException as e:
+                self.log.debug(f"Attempt {attempts} failed: {str(e)}")
+                time.sleep(retry_interval)
+        self.log.error(f"Port forward not ready after {timeout} seconds")
         return False
-
+    
     def cb_api_request(self, base_url, method, endpoint, data=None):
         url = f"{base_url}{endpoint}"
         try:
@@ -197,6 +228,15 @@ class LNBasicTest(TestBase):
             self.log.error(f"Circuit Breaker API request failed: {e}")
             raise
 
+    def cleanup_kubectl_creted_services(self):
+        """Clean up any created resources"""
+        if hasattr(self, 'service_to_cleanup') and self.service_to_cleanup:
+            self.log.info(f"Deleting service {self.service_to_cleanup}")
+            subprocess.run(
+                ["kubectl", "delete", "svc", self.service_to_cleanup],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
 
 if __name__ == "__main__":
     test = LNBasicTest()
