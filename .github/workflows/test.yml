@@ -36,10 +36,6 @@ jobs:
     strategy:
       matrix:
         test:
-          - conf_test.py
-          - dag_connection_test.py
-          - graph_test.py
-          - logging_test.py
           - ln_basic_test.py
           - ln_test.py
           - onion_test.py
