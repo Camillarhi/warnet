@@ -11,7 +11,6 @@ from time import sleep
 import requests
 from test_base import TestBase
 
-from warnet.process import stream_command
 from warnet.process import run_command
 
 
@@ -176,10 +175,10 @@ class LNBasicTest(TestBase):
         # except subprocess.CalledProcessError as e:
         #     self.log.error(f"Failed to create service: {e.stderr}")
         #     raise
-        
+
         command = f"kubectl expose pod {pod_name} --name {service_name} --port {self.cb_port} --target-port {self.cb_port}"
         result = run_command(command)
-        self.log.info(f"Service creation command output: {result}")        
+        self.log.info(f"Service creation command output: {result}")
 
         time.sleep(51)  # Wait for the service to be created
 
