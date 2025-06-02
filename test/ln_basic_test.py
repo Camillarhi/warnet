@@ -12,6 +12,7 @@ import requests
 from test_base import TestBase
 
 from warnet.process import stream_command
+from warnet.process import run_command
 
 
 class LNBasicTest(TestBase):
@@ -55,7 +56,7 @@ class LNBasicTest(TestBase):
 
     def setup_network(self):
         self.log.info("Setting up network")
-        stream_command(f"warnet deploy {self.network_dir}")
+        run_command(f"warnet deploy {self.network_dir}")
 
     def fund_wallets(self):
         outputs = ""
@@ -156,25 +157,29 @@ class LNBasicTest(TestBase):
         service_name = f"{pod_name}-svc"
 
         self.log.info(f"Creating service {service_name} for pod {pod_name}")
-        try:
-            subprocess.run(
-                [
-                    "kubectl",
-                    "expose",
-                    "pod",
-                    pod_name,
-                    "--name",
-                    service_name,
-                    "--port",
-                    str(self.cb_port),
-                    "--target-port",
-                    str(self.cb_port),
-                ],
-                check=True,
-            )
-        except subprocess.CalledProcessError as e:
-            self.log.error(f"Failed to create service: {e.stderr}")
-            raise
+        # try:
+        #     subprocess.run(
+        #         [
+        #             "kubectl",
+        #             "expose",
+        #             "pod",
+        #             pod_name,
+        #             "--name",
+        #             service_name,
+        #             "--port",
+        #             str(self.cb_port),
+        #             "--target-port",
+        #             str(self.cb_port),
+        #         ],
+        #         check=True,
+        #     )
+        # except subprocess.CalledProcessError as e:
+        #     self.log.error(f"Failed to create service: {e.stderr}")
+        #     raise
+        
+        command = f"kubectl expose pod {pod_name} --name {service_name} --port {self.cb_port} --target-port {self.cb_port}"
+        result = run_command(command)
+        self.log.info(f"Service creation command output: {result}")        
 
         time.sleep(51)  # Wait for the service to be created
 
