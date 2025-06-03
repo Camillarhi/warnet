@@ -59,8 +59,8 @@ class LNBasicTest(TestBase):
 
     def fund_wallets(self):
         outputs = ""
-        for lnd in self.lns:
-            addr = json.loads(self.warnet(f"ln rpc {lnd} newaddress p2wkh"))["address"]
+        for ln in self.lns:
+            addr = json.loads(self.warnet(f"ln rpc {ln} newaddress p2wkh"))["address"]
             outputs += f',"{addr}":10'
         # trim first comma
         outputs = outputs[1:]
@@ -133,20 +133,19 @@ class LNBasicTest(TestBase):
         self.warnet(f"run {scenario_file} --source_dir={self.scen_dir} --debug")
 
     def test_circuit_breaker_api(self):
-        self.log.info("Testing Circuit Breaker API")
-
-        # Set up port forwarding to the circuit breaker
-        cb_url = self.setup_api_access(self.cb_node)
-
-        self.log.info(f"Testing Circuit Breaker API at {cb_url}")
+        self.log.info("Testing Circuit Breaker API ")
 
         # Test /info endpoint
-        info = self.cb_api_request(cb_url, "get", "/info")
-        assert "version" in info, "Circuit breaker info missing version"
+        info_cmd = f"kubectl exec {self.cb_node} -c circuitbreaker -- wget -qO - 127.0.0.1:{self.cb_port}/api/info"
+        info = json.loads(subprocess.check_output(info_cmd, shell=True).decode())
+        assert "nodeKey" in info, "Circuit breaker info missing nodeKey"
+        self.log.info(f"Got node info: {info}")
 
         # Test /limits endpoint
-        limits = self.cb_api_request(cb_url, "get", "/limits")
-        assert isinstance(limits, dict), "Limits should be a dictionary"
+        limits_cmd = f"kubectl exec {self.cb_node} -c circuitbreaker -- wget -qO - 127.0.0.1:{self.cb_port}/api/limits"
+        limits = json.loads(subprocess.check_output(limits_cmd, shell=True).decode())
+        assert "limits" in limits, "Circuit breaker limits missing"
+        self.log.info(f"Got limits: {limits}")
 
         self.log.info("✅ Circuit Breaker API tests passed")
 
@@ -156,25 +155,6 @@ class LNBasicTest(TestBase):
         service_name = f"{pod_name}-svc"
 
         self.log.info(f"Creating service {service_name} for pod {pod_name}")
-        # try:
-        #     subprocess.run(
-        #         [
-        #             "kubectl",
-        #             "expose",
-        #             "pod",
-        #             pod_name,
-        #             "--name",
-        #             service_name,
-        #             "--port",
-        #             str(self.cb_port),
-        #             "--target-port",
-        #             str(self.cb_port),
-        #         ],
-        #         check=True,
-        #     )
-        # except subprocess.CalledProcessError as e:
-        #     self.log.error(f"Failed to create service: {e.stderr}")
-        #     raise
 
         command = f"kubectl expose pod {pod_name} --name {service_name} --port {self.cb_port} --target-port {self.cb_port}"
         result = run_command(command)
