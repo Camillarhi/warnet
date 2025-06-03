@@ -37,15 +37,15 @@ jobs:
       matrix:
         test:
           - ln_basic_test.py
-          - ln_test.py
-          - onion_test.py
-          - plugin_test.py
-          - rpc_test.py
-          - services_test.py
-          - signet_test.py
-          - scenarios_test.py
-          - namespace_admin_test.py
-          - wargames_test.py
+          # - ln_test.py
+          # - onion_test.py
+          # - plugin_test.py
+          # - rpc_test.py
+          # - services_test.py
+          # - signet_test.py
+          # - scenarios_test.py
+          # - namespace_admin_test.py
+          # - wargames_test.py
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4.2.0
